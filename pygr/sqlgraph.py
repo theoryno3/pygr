@@ -458,19 +458,8 @@ def get_table_schema(self, analyzeSchema=True):
         attribute to supply a method for obtaining table schema
         for this module''' % modname)
     schema_func(self, analyzeSchema) # run the schema function
-
     
-
-def generic_table_schema(self, analyzeSchema=True):
-    'retrieve table schema from a SQLAlchemy-supported database, save on self'
-    sqlalchemy_compatible()
-    
-    #self._format_query = SQLFormatDict(sqlite.paramstyle, _sqliteMacros)
-    if not analyzeSchema:
-        return
-    self.clear_schema() # reset settings and dictionaries
-    self.serverInfo.get_table_schema(self,self.name, analyzeSchema)
-
+# Non-SQLAlchemy style of retrieving table schema
 _schemaModuleDict = {'MySQLdb.cursors':mysql_table_schema,
                      'pysqlite2.dbapi2':sqlite_table_schema,
                      'sqlite3':sqlite_table_schema}
