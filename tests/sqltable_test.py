@@ -1,16 +1,19 @@
 import os, unittest
 from testlib import testutil, PygrTestProgram, SkipTest
 from pygr.sqlgraph import SQLTable, SQLTableNoCache,\
-     MapView, GraphView, GenericServerInfo, import_sqlite
+     MapView, GraphView, DBServerInfo, GenericServerInfo, import_sqlite,\
+     sqlalchemy_compatible, SQLiteServerInfo
 from pygr import logger
 
-import pygr
 
 class SQLTable_Setup(unittest.TestCase):
     tableClass = SQLTable
     def __init__(self, *args, **kwargs):
         unittest.TestCase.__init__(self, *args, **kwargs)
-        self.serverInfo = GenericServerInfo("sqlite:////tmp/test.sqlite.db") # share conn for all tests
+        if sqlalchemy_compatible(silent_fail=True):
+            self.serverInfo = GenericServerInfo("sqlite:////tmp/test.sqlite.db") # share conn for all tests
+        else:
+            self.serverInfo = SQLiteServerInfo("/tmp/test.sqlite.db")
     def setUp(self):
         try:
             self.load_data(writeable=self.writeable)
@@ -263,14 +266,24 @@ class Ensembl_Test(unittest.TestCase):
         # test will be skipped if mysql module or ensembldb server unavailable
 
         logger.debug('accessing ensembldb.ensembl.org')
-        conn = GenericServerInfo('mysql://anonymous@ensembldb.ensembl.org/homo_sapiens_core_47_36i')
-        try:
-            translationDB = SQLTable('translation',
+        if sqlalchemy_compatible(silent_fail=True):
+            conn = GenericServerInfo('mysql://anonymous@ensembldb.ensembl.org/homo_sapiens_core_47_36i')
+            try:
+                translationDB = SQLTable('translation',
                                      serverInfo=conn)
-            exonDB = SQLTable('exon', serverInfo=conn)
-        except ImportError,e:
-            raise SkipTest(e)
-        
+                exonDB = SQLTable('exon', serverInfo=conn)
+            except ImportError,e:
+                raise SkipTest(e)
+        else:
+            conn = DBServerInfo(host='ensembldb.ensembl.org', user='anonymous',
+                                passwd='')
+            try:
+                translationDB = SQLTable('homo_sapiens_core_47_36i.translation',
+                                         serverInfo=conn)
+                exonDB = SQLTable('homo_sapiens_core_47_36i.exon', serverInfo=conn)
+            except ImportError,e:
+                raise SkipTest(e)
+
         sql_statement = '''SELECT t3.exon_id FROM
 homo_sapiens_core_47_36i.translation AS tr,
 homo_sapiens_core_47_36i.exon_transcript AS t1,
