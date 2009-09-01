@@ -1900,9 +1900,10 @@ class GenericServerInfo(DBServerInfo):
         s = dialect._show_create_table(engine,table_obj)
         return str(s)
 
-    def get_table_schema(self, owner_obj, analyzeSchema=True):
+    def get_table_schema(self, owner_obj, analyzeSchema=True, tablename=None):
         """Obtain all of the following information required by SQLTableBase.
             owner_obj - a SQLTableBase-derivative instance.
+            tablename - for non-sqlgraph support
         """
         self._start_connection()
                 
@@ -1928,7 +1929,8 @@ class GenericServerInfo(DBServerInfo):
         owner_obj.primary_key = None
         owner_obj.indexed = {} 
         
-        tablename = owner_obj.name # VALID SQLTableBase derivative???
+        if not tablename: # FOR non-sqlgraph support
+            tablename = owner_obj.name # VALID SQLTableBase derivative???
         tableobj = self.get_tableobj(tablename)
         table_columns = tableobj.columns
 
