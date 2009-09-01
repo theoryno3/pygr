@@ -277,12 +277,17 @@ def sqlite_enabled():
 class SQLite_Mixin(object):
     'use this as a base for any test'
     def setUp(self):
-        from pygr.sqlgraph import SQLiteServerInfo
+        from pygr.sqlgraph import SQLiteServerInfo,\
+                                  sqlalchemy_compatible,\
+                                  GenericServerInfo
         if not sqlite_enabled():
             raise SkipTest
         self.sqlite_file = tempdatafile('test_sqlite.db', False)
         self.tearDown(False) # delete the file if it exists
-        self.serverInfo = SQLiteServerInfo(self.sqlite_file)
+        if not sqlalchemy_compatible(silent_fail=True):
+            self.serverInfo = SQLiteServerInfo(self.sqlite_file)
+        else:
+            self.serverInfo = GenericServerInfo("sqlite:///"+self.sqlite_file)
         self.sqlite_load() # load data provided by subclass method
     def tearDown(self, closeConnection=True):
         'delete the sqlite db file after (optionally) closing connection'
