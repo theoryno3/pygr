@@ -496,7 +496,7 @@ class SQLTableBase(object, UserDict.DictMixin):
 
         if cursor is None: # sqlite file or mysql server is inaccessible
             raise(Exception('Error: Unable to to obtain a cursor from the database.\n'+\
-                            '       Check your database setting.' ))
+                            '       Check your database setting. serverInfo=%s, cursor=%s'%(serverInfo,cursor) ))
                        
         self.cursor = cursor
         if createTable is not None: # RUN COMMAND TO CREATE THIS TABLE
