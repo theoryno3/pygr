@@ -8,6 +8,7 @@ from pygr import logger
 
 class SQLTable_Setup(unittest.TestCase):
     tableClass = SQLTable
+    use_sqlalchemy = False
     def __init__(self, *args, **kwargs):
         unittest.TestCase.__init__(self, *args, **kwargs)
         if self.use_sqlalchemy:
