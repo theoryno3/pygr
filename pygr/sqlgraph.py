@@ -1912,9 +1912,7 @@ class GenericServerInfo(DBServerInfo):
             owner_obj._format_query = SQLFormatDict(self.get_param_style(),
                                                 macros)
 
-        if not analyzeSchema: return
-        
-        # analyze schema information
+        # initialize SQLTableBase member variables 
         owner_obj.columnName = []       
         owner_obj.columnType = {}
         owner_obj.description = {}
@@ -1922,6 +1920,9 @@ class GenericServerInfo(DBServerInfo):
         owner_obj.primary_key = None
         owner_obj.indexed = {} 
         
+        # analyze schema information
+        if not analyzeSchema: return
+
         if not tablename: # FOR non-sqlgraph support
             tablename = owner_obj.name # VALID SQLTableBase derivative???
         tableobj = self.get_tableobj(tablename)
