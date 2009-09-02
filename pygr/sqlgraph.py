@@ -1836,10 +1836,8 @@ class GenericServerInfo(DBServerInfo):
             self.metadata
         except AttributeError:
             self.metadata = MetaData(*self.args,**self.kwargs)
-        
-        self.metadata.reflect()
+            self.metadata.reflect() # Actually pulls table schema from db
 
-        from sqlalchemy import create_engine        
         try:
             self.dbengine
         except AttributeError:
