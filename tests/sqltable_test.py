@@ -13,9 +13,9 @@ class SQLTable_Setup(unittest.TestCase):
         if sqlalchemy_compatible(silent_fail=True)==True:
             #self.serverInfo = GenericServerInfo("sqlite:///test.sqlite.db") # sqlalchemy
             #self.serverInfo = GenericServerInfo("mysql://test@localhost/test_pygr") # sqlalchemy
-            self.serverInfo = GenericServerInfo("mysql://test@motifmap.ics.uci.edu/idyll") # sqlalchemy
+            self.serverInfo = GenericServerInfo("mysql://test:test@mine-9.ics.uci.edu/idyll") # sqlalchemy
         else:
-            self.serverInfo =  DBServerInfo(host='motifmap.ics.uci.edu',
+            self.serverInfo =  DBServerInfo(host='mine-9.ics.uci.edu',
                                             user='test',passwd='test',
                                             db='idyll') # share conn for all tests, non-sqlalchemy
     def setUp(self):
