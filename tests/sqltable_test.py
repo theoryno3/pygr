@@ -11,15 +11,7 @@ class SQLTable_Setup(unittest.TestCase):
     use_sqlalchemy = False
     
     def setUp(self):
-        if self.use_sqlalchemy:
-            if sqlalchemy_compatible(silent_fail=True):
-                self.serverInfo = GenericServerInfo("sqlite:///test.sqlite.db") # sqlalchemy
-            else:
-                raise SkipTest('no sqlalchemy installed')
-            #self.serverInfo = GenericServerInfo("mysql://test@localhost/test_pygr") # sqlalchemy
-        else:
-            self.serverInfo =  DBServerInfo() # share conn for all tests, non-sqlalchemy
-            
+        self.serverInfo =  DBServerInfo() # share conn for all tests, non-sqlalchemy
         try:
             self.load_data(writeable=self.writeable)
         except ImportError:
@@ -165,7 +157,13 @@ class SQLTable_Test(SQLTable_Setup):
         assert self.sourceDB[2] in m
 
 class SQLTable_Test_with_SQLAlchemy(SQLTable_Test):
-    use_sqlalchemy = True
+    def setUp(self):
+        if not sqlalchemy_compatible(silent_fail=True):
+            raise SkipTest("no sqlalchemy")
+        
+        self.serverInfo = GenericServerInfo("sqlite:///test.sqlite.db") # sqlalchemy
+        self.load_data(writeable=self.writeable)
+
     
 class SQLiteBase(testutil.SQLite_Mixin):
     def sqlite_load(self):
