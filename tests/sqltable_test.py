@@ -23,7 +23,7 @@ class SQLTable_Setup(unittest.TestCase):
             self.load_data(writeable=self.writeable)
         except ImportError:
             raise SkipTest('missing MySQLdb module?')
-    def load_data(self, tableName='sqltable_test', writeable=False):
+    def load_data(self, tableName='test.sqltable_test', writeable=False):
         'create 3 tables and load 9 rows for our tests'
         self.tableName = tableName
         self.joinTable1 = joinTable1 = tableName + '1'
