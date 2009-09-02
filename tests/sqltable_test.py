@@ -17,7 +17,7 @@ class SQLTable_Setup(unittest.TestCase):
         else:
             self.serverInfo =  DBServerInfo(host='motifmap.ics.uci.edu',
                                             user='test',passwd='test',
-                                            dbname='idyll') # share conn for all tests, non-sqlalchemy
+                                            db='idyll') # share conn for all tests, non-sqlalchemy
     def setUp(self):
         try:
             self.load_data(writeable=self.writeable)
