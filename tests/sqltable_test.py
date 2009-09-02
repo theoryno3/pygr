@@ -8,22 +8,15 @@ from pygr import logger
 
 class SQLTable_Setup(unittest.TestCase):
     tableClass = SQLTable
-    def __init__(self, *args, **kwargs):
-        unittest.TestCase.__init__(self, *args, **kwargs)
-        if sqlalchemy_compatible(silent_fail=True)==True:
-            #self.serverInfo = GenericServerInfo("sqlite:///test.sqlite.db") # sqlalchemy
-            #self.serverInfo = GenericServerInfo("mysql://test@localhost/test_pygr") # sqlalchemy
-            self.serverInfo = GenericServerInfo("mysql://test:test@mine-9.ics.uci.edu/idyll") # sqlalchemy
-        else:
-            self.serverInfo =  DBServerInfo(host='mine-9.ics.uci.edu',
-                                            user='test',passwd='test',
-                                            db='idyll') # share conn for all tests, non-sqlalchemy
+    use_sqlalchemy = False
+    
     def setUp(self):
+        self.serverInfo =  DBServerInfo() # share conn for all tests, non-sqlalchemy
         try:
             self.load_data(writeable=self.writeable)
         except ImportError:
             raise SkipTest('missing MySQLdb module?')
-    def load_data(self, tableName='sqltable_test', writeable=False):
+    def load_data(self, tableName='test.sqltable_test', writeable=False):
         'create 3 tables and load 9 rows for our tests'
         self.tableName = tableName
         self.joinTable1 = joinTable1 = tableName + '1'
@@ -66,6 +59,8 @@ class SQLTable_Setup(unittest.TestCase):
 
 class SQLTable_Test(SQLTable_Setup):
     writeable = False # read-only database interface
+    use_sqlalchemy = False
+    
     def test_keys(self):
         k = self.db.keys()
         k.sort()
@@ -161,6 +156,15 @@ class SQLTable_Test(SQLTable_Setup):
         assert self.targetDB[6] in d and self.targetDB[8] in d
         assert self.sourceDB[2] in m
 
+class SQLTable_Test_with_SQLAlchemy(SQLTable_Test):
+    def setUp(self):
+        if not sqlalchemy_compatible(silent_fail=True):
+            raise SkipTest("no sqlalchemy")
+        
+        self.serverInfo = GenericServerInfo("sqlite:///test.sqlite.db") # sqlalchemy
+        self.load_data(writeable=self.writeable)
+
+    
 class SQLiteBase(testutil.SQLite_Mixin):
     def sqlite_load(self):
         self.load_data('sqltable_test', writeable=self.writeable)
