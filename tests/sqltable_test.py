@@ -10,11 +10,14 @@ class SQLTable_Setup(unittest.TestCase):
     tableClass = SQLTable
     def __init__(self, *args, **kwargs):
         unittest.TestCase.__init__(self, *args, **kwargs)
-        if sqlalchemy_compatible(silent_fail=True):
-            self.serverInfo = GenericServerInfo("sqlite:///test.sqlite.db") # sqlalchemy
+        if sqlalchemy_compatible(silent_fail=True)==True:
+            #self.serverInfo = GenericServerInfo("sqlite:///test.sqlite.db") # sqlalchemy
             #self.serverInfo = GenericServerInfo("mysql://test@localhost/test_pygr") # sqlalchemy
+            self.serverInfo = GenericServerInfo("mysql://test@motifmap.ics.uci.edu/idyll") # sqlalchemy
         else:
-            self.serverInfo =  DBServerInfo() # share conn for all tests, non-sqlalchemy
+            self.serverInfo =  DBServerInfo(host='motifmap.ics.uci.edu',
+                                            user='test',passwd='test',
+                                            dbname='idyll') # share conn for all tests, non-sqlalchemy
     def setUp(self):
         try:
             self.load_data(writeable=self.writeable)
