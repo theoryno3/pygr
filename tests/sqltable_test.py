@@ -12,8 +12,9 @@ class SQLTable_Setup(unittest.TestCase):
         unittest.TestCase.__init__(self, *args, **kwargs)
         if sqlalchemy_compatible(silent_fail=True):
             self.serverInfo = GenericServerInfo("sqlite:///test.sqlite.db") # sqlalchemy
+            #self.serverInfo = GenericServerInfo("mysql://test@localhost/test_pygr") # sqlalchemy
         else:
-            self.serverInfo =  DBServerInfo() # share conn for all tests, non-sqlalchemy
+            self.serverInfo =  DBServerInfo(host="localhost",user="test",db="test_pygr") # share conn for all tests, non-sqlalchemy
     def setUp(self):
         try:
             self.load_data(writeable=self.writeable)
