@@ -481,7 +481,8 @@ class SQLTableBase(object, UserDict.DictMixin):
         self.orderBy = orderBy
         self.writeable = writeable
         self.serverInfo = serverInfo
-        if cursor is None:
+
+        if cursor is None: # let's grab a cursor
             if serverInfo is not None: # get cursor from serverInfo
                 cursor = serverInfo.cursor()
             else: # try to read connection info from name or config file
@@ -492,6 +493,11 @@ class SQLTableBase(object, UserDict.DictMixin):
         else:
             warnings.warn("""The cursor argument is deprecated.  Use serverInfo instead! """,
                           DeprecationWarning, stacklevel=2)
+
+        if cursor is None: # sqlite file or mysql server is inaccessible
+            raise(Exception('Error: Unable to to obtain a cursor from the database.\n'+\
+                            '       Check your database setting.' ))
+                       
         self.cursor = cursor
         if createTable is not None: # RUN COMMAND TO CREATE THIS TABLE
             if dropIfExists: # get rid of any existing table
