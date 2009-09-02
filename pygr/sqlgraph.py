@@ -495,7 +495,7 @@ class SQLTableBase(object, UserDict.DictMixin):
         self.cursor = cursor
         if createTable is not None: # RUN COMMAND TO CREATE THIS TABLE
             if dropIfExists: # get rid of any existing table
-                if sqlalchemy_compatible(silent_fail=True):
+                if sqlalchemy_compatible(silent_fail=True) and serverInfo is not None:
                     try: # Use SQLAlchemy
                         table = self.serverInfo.get_tableobj(name)
                     except:
