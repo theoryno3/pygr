@@ -10,8 +10,11 @@ class SQLTable_Setup(unittest.TestCase):
     tableClass = SQLTable
     def __init__(self, *args, **kwargs):
         unittest.TestCase.__init__(self, *args, **kwargs)
-        if sqlalchemy_compatible(silent_fail=True):
-            self.serverInfo = GenericServerInfo("sqlite:///test.sqlite.db") # sqlalchemy
+        if self.use_sqlalchemy:
+            if sqlalchemy_compatible(silent_fail=True):
+                self.serverInfo = GenericServerInfo("sqlite:///test.sqlite.db") # sqlalchemy
+            else:
+                raise SkipTest('no sqlalchemy installed')
             #self.serverInfo = GenericServerInfo("mysql://test@localhost/test_pygr") # sqlalchemy
         else:
             self.serverInfo =  DBServerInfo() # share conn for all tests, non-sqlalchemy
@@ -63,6 +66,8 @@ class SQLTable_Setup(unittest.TestCase):
 
 class SQLTable_Test(SQLTable_Setup):
     writeable = False # read-only database interface
+    use_sqlalchemy = False
+    
     def test_keys(self):
         k = self.db.keys()
         k.sort()
@@ -158,6 +163,9 @@ class SQLTable_Test(SQLTable_Setup):
         assert self.targetDB[6] in d and self.targetDB[8] in d
         assert self.sourceDB[2] in m
 
+class SQLTable_Test_with_SQLAlchemy(SQLTable_Test):
+    use_sqlalchemy = True
+    
 class SQLiteBase(testutil.SQLite_Mixin):
     def sqlite_load(self):
         self.load_data('sqltable_test', writeable=self.writeable)
