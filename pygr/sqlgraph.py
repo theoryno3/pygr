@@ -400,6 +400,7 @@ def sqlite_table_schema(self, analyzeSchema=True):
         self.columnName.append(field) # list of columns in same order as table
         self.description[field] = self.cursor.description[icol]
         self.columnType[field] = c[2] # SQL COLUMN TYPE
+    #logger.info("column types: %s" % self.columnType)
     # Get primary key / unique indexes.
     self.cursor.execute('select name from sqlite_master where tbl_name="%s" \
                         and type="index" and sql is null' % self.name)
@@ -410,6 +411,7 @@ def sqlite_table_schema(self, analyzeSchema=True):
             self.primary_key = l[0][2]
             break # done searching for primary key!
     if self.primary_key is None:
+        #logger.info("self.primary_key = %s" % self.primary_key)
         # Grrr, INTEGER PRIMARY KEY handled differently.
         self.cursor.execute('select sql from sqlite_master where \
                             tbl_name="%s" and type="table"' % self.name)
@@ -420,9 +422,10 @@ def sqlite_table_schema(self, analyzeSchema=True):
                 if col in self.columnType:
                     self.primary_key = col
                     break # done searching for primary key!
-                else:
-                    raise ValueError('unknown primary key %s in table %s'
-                                     % (col, self.name))
+
+                    #logger.error('unknown primary key %s in table %s' % (col, self.name))
+                                 # raise ValueError('unknown primary key %s in table %s'
+                                 #                  % (col, self.name))
     if self.primary_key is not None: # check its type
         if self.columnType[self.primary_key] == 'int' or \
                self.columnType[self.primary_key] == 'integer':
@@ -485,16 +488,23 @@ class SQLFormatDict(object):
 
 def get_table_schema(self, analyzeSchema=True):
     'run the right schema function based on type of db server connection'
+
     try:
         modname = self.cursor.__class__.__module__
     except AttributeError:
         raise ValueError('no cursor object or module information!')
-    try:
-        schema_func = self._schemaModuleDict[modname]
-    except KeyError:
-        raise KeyError('''unknown db module: %s. Use _schemaModuleDict
-        attribute to supply a method for obtaining table schema
-        for this module''' % modname)
+    try: # IGB Code
+        schema_func = self.serverInfo.get_table_schema
+    except AttributeError:
+        #logger.info("Pygr serverinfo")
+    
+        try:
+            schema_func = self._schemaModuleDict[modname]
+        except KeyError:
+            raise KeyError('''unknown db module: %s. Use _schemaModuleDict
+                  attribute to supply a method for obtaining table schema
+                  for this module''' % modname)
+    # #logger.info("Using get_table_scheme for module %s for object %s" % (modname, self))
     schema_func(self, analyzeSchema) # run the schema function
 
 
@@ -502,6 +512,25 @@ _schemaModuleDict = {'MySQLdb.cursors': mysql_table_schema,
                      'pysqlite2.dbapi2': sqlite_table_schema,
                      'sqlite3': sqlite_table_schema}
 
+
+def sqlalchemy_compatible(silent_fail=False):
+    '''check whether sqlalchemy is present and functional
+    IGB code
+    '''
+    import sys
+    if sys.version_info < (2, 4):
+        if not silent_fail:
+            raise(Exception("Error: Python version 2.4+ required."))
+        else:
+            return False
+    try:
+        import sqlalchemy
+    except ImportError, e:
+        if not silent_fail:
+            raise(Exception("Error: SQLAlchemy required: %s" % e))
+        else:
+            return False
+    return True
 
 class SQLTableBase(object, UserDict.DictMixin):
     "Store information about an SQL table as dict keyed by primary key"
@@ -514,6 +543,7 @@ class SQLTableBase(object, UserDict.DictMixin):
                  serverInfo=None, autoGC=True, orderBy=None,
                  writeable=False, iterSQL=None, iterColumns=None,
                  primaryKey=None, allowNonUniqueID=False, **kwargs):
+
         if autoGC: # automatically garbage collect unused objects
             self._weakValueDict = RecentValueDictionary(autoGC) # object cache
         else:
@@ -528,21 +558,51 @@ class SQLTableBase(object, UserDict.DictMixin):
                                  specify iterSQL and iterColumns as well!')
 
         self.writeable = writeable
-        if cursor is None:
+        # IGB code BEGIN -- use sqlalchemy when present
+        if serverInfo is not None:
+            self.serverInfo = serverInfo
+        if cursor is None: # let's grab a cursor
             if serverInfo is not None: # get cursor from serverInfo
                 cursor = serverInfo.cursor()
             else: # try to read connection info from name or config file
-                name, cursor, serverInfo = get_name_cursor(name, **kwargs)
+                if not sqlalchemy_compatible(silent_fail=True):
+                    name,cursor = getNameCursor(name,**kwargs)
+                else: # USING GenericServerInfo
+                    cursor = self.serverInfo.cursor()
         else:
-            warnings.warn("The cursor argument is deprecated. Use serverInfo \
-                          instead!", DeprecationWarning, stacklevel=2)
+            warnings.warn("""The cursor argument is deprecated.  Use serverInfo instead! """,
+                          DeprecationWarning, stacklevel=2)
+
+        if cursor is None: # sqlite file or mysql server is inaccessible
+            raise(Exception('Error: Unable to to obtain a cursor from the database.\n'+\
+                            '       Check your database setting. serverInfo=%s, cursor=%s'%(serverInfo,cursor) ))
+                       
         self.cursor = cursor
         if createTable is not None: # RUN COMMAND TO CREATE THIS TABLE
             if dropIfExists: # get rid of any existing table
-                cursor.execute('drop table if exists ' + name)
+                if sqlalchemy_compatible(silent_fail=True) and serverInfo is not None and serverInfo.__class__ == GenericServerInfo:
+                    #logger.warn("SQLAlchemy found. Attempting to drop table")
+                    try: # Use SQLAlchemy
+                        table = self.serverInfo.get_tableobj(name)
+                    except Exception, e:
+                        #logger.warn("SQLAlchemy: table '%s' not found: %s" % (name,e))
+                        table = None
+                    if table:
+                        #logger.warn("SQLAlchemy: dropping a table")
+                        table.drop()
+                else:
+                    #logger.warn("Should be dropping a table")
+                    cursor.execute('drop table if exists ' + name)
             self.get_table_schema(False) # check dbtype, init _format_query
-            sql, params = self._format_query(createTable, ()) # apply macros
-            cursor.execute(sql) # create the table
+            sql,params = self._format_query(createTable, ()) # apply macros
+            try:
+                cursor.execute(sql) # create the table
+            except Exception as e:
+                #logger.error("Tried to execute '%s'" % sql)
+                raise e
+            
+        # IGB code END
+
         self.name = name
         if graph is not None:
             self.graph = graph
@@ -551,10 +611,13 @@ class SQLTableBase(object, UserDict.DictMixin):
         if arraysize is not None:
             self.arraysize = arraysize
             cursor.arraysize = arraysize
+            
         self.get_table_schema() # get schema of columns to serve as attrs
         if primaryKey is not None:
             self.primary_key = primaryKey
             self.primaryKey = primaryKey
+            #logger.info("AFTER get_table_schema, self.primaryKey is %s, passed primary key is %s" % (self.primaryKey, primaryKey))
+
         self.allowNonUniqueID = allowNonUniqueID
         self.data = {} # map of all attributes, including aliases
         for icol, field in enumerate(self.columnName):
@@ -866,6 +929,7 @@ def getKeys(self, queryOption='', selectCols=None):
         selectCols=self.primary_key
     if queryOption=='' and self.orderBy is not None:
         queryOption = self.orderBy # apply default ordering
+    ##logger.info("getKeys: self=%s, name=%s, queryOption=%s, selectCols=%s" % (self, self.name, queryOption, selectCols))
     self.cursor.execute('select %s from %s %s'
                         % (selectCols, self.name, queryOption))
     # Get all at once, since other calls may reuse this cursor.
@@ -879,22 +943,31 @@ def iter_keys(self, selectCols=None, orderBy='', map_f=iter,
         selectCols = self.primary_key
     if orderBy == '' and self.orderBy is not None:
         orderBy = self.orderBy # apply default ordering
-    cursor = self.get_new_cursor()
+    
+    # #logger.info("!! what is the caller obj: %s, %s" % (self, type(self)))
+    # #logger.info("!! let's peek at the object: %s" % (dir(self)))
+    cursor = self.get_new_cursor() # Oooh, I see you.
+    ##logger.info("!! inside iter_keys. What is cursor type: %s" % cursor)
     if cursor: # got our own cursor, guaranteeing query isolation
         if hasattr(self.serverInfo, 'iter_keys') \
            and self.serverInfo.custom_iter_keys:
             # use custom iter_keys() method from serverInfo
+            ##logger.info("use custom iter_keys() method from serverInfo")
             return self.serverInfo.iter_keys(self, cursor,
                                              selectCols=selectCols,
                                              map_f=map_f, orderBy=orderBy,
                                              cache_f=cache_f, **kwargs)
         else:
+            #logger.info("!!!!!!!!!!!!!!!!!! NOT use custom iter_keys() method from serverInfo %s" % repr(self.serverInfo.args))
+            ##logger.info("!! parent object: %s" % self)
+            ##logger.info("!! cursor object: %s. kwargs: %s" % (cursor,kwargs)) 
             self._select(cursor=cursor, selectCols=selectCols,
                          orderBy=orderBy, **kwargs)
             return self.generic_iterator(cursor=cursor, cache_f=cache_f,
                                          map_f=map_f,
                                          cursorHolder=CursorCloser(cursor))
     else: # must pre-fetch all keys to ensure query isolation
+        #logger.info("!!!!!!!!!!!! pre-fetch all keys to ensure query isolation")
         if get_f is not None:
             return iter(get_f())
         else:
@@ -1383,8 +1456,8 @@ def getColumnTypes(createTable, attrAlias={}, defaultColumnType='int',
                 else:
                     raise ValueError('SQLGraph node/edge must be int or str!')
         l.append((attrName, defaultColumnType))
-        logger.warn('no type info found for %s, so using default: %s'
-                    % (attrName, defaultColumnType))
+        #logger.warn('no type info found for %s, so using default: %s'
+        #            % (attrName, defaultColumnType))
     return l
 
 
@@ -1405,9 +1478,10 @@ class SQLGraph(SQLTableMultiNoCache):
 
     def __init__(self, name, *l, **kwargs):
         graphArgs, tableArgs = split_kwargs(kwargs,
-                    ('attrAlias', 'defaultColumnType', 'columnAttrs',
-                     'sourceDB', 'targetDB', 'edgeDB', 'simpleKeys',
-                     'unpack_edge', 'edgeDictClass', 'graph'))
+                                            #('attrAlias', 'defaultColumnType', 'columnAttrs',
+                                             ('defaultColumnType', 'columnAttrs',
+                                              'sourceDB', 'targetDB', 'edgeDB', 'simpleKeys',
+                                              'unpack_edge', 'edgeDictClass', 'graph'))
         if 'createTable' in kwargs: # CREATE A SCHEMA FOR THIS TABLE
             c = getColumnTypes(**kwargs)
             tableArgs['createTable'] = \
@@ -2053,6 +2127,8 @@ class DBServerInfo(object):
         self.kwargs = kwargs
         self.serverSideCursors = serverSideCursors
         self.custom_iter_keys = blockIterators
+        ##logger.info("serverSideCursors=%s, blockIterators=%s" % (serverSideCursors, blockIterators))
+
         if self.serverSideCursors and not self.custom_iter_keys:
             raise ValueError('serverSideCursors=True requires \
                              blockIterators=True!')
@@ -2103,6 +2179,7 @@ class MySQLServerInfo(DBServerInfo):
             return DBServerInfo.new_cursor(self, arraysize)
         try:
             conn = self._conn_sscursor
+            #logger.info("Using SSCursor")
         except AttributeError:
             self._conn_sscursor, cursor = mysql_connect(useStreaming=True,
                                                         *self.args,
@@ -2110,6 +2187,7 @@ class MySQLServerInfo(DBServerInfo):
         else:
             cursor = self._conn_sscursor.cursor()
         if arraysize is not None:
+            #logger.info("arraysize = %s" % arraysize)
             cursor.arraysize = arraysize
         return cursor
 
@@ -2123,11 +2201,17 @@ class MySQLServerInfo(DBServerInfo):
 
     def iter_keys(self, db, cursor, map_f=iter,
                   cache_f=lambda x: [t[0] for t in x], **kwargs):
+
         block_iterator = BlockIterator(db, cursor, **kwargs)
+        #logger.info("kwargs: %s" % kwargs)
+        
         try:
             cache_f = block_iterator.cache_f
         except AttributeError:
             pass
+        
+        #logger.info("cache_f = %s" % cache_f)
+
         return db.generic_iterator(cursor=cursor, cache_f=cache_f,
                                    map_f=map_f, fetch_f=block_iterator)
 
@@ -2215,9 +2299,391 @@ class SQLiteServerInfo(DBServerInfo):
             raise ValueError('SQLite in-memory database is not picklable!')
         return DBServerInfo.__getstate__(self)
 
+# IGB code: Used by GenericServerInfo to support mysql/sqlite query format                                                                                                        
+_formatMacrosDict = {'mysql':_mysqlMacros,
+                     'sqlite':_sqliteMacros}
+
+
+class GenericServerInfo(DBServerInfo):
+    """picklable reference to an sqlalchemy-supported database.
+    IGB code
+    """
+    def __init__(self, *args, **kwargs):
+        """Takes generic dburi argument, eg, 
+            sqlite:////path/to/sqlite.db
+            mysql://user:password@host:port/database
+            postgresql://user:password@host:port/database
+
+            Note that when instantiating this class, all you really need to pass
+            is the dburi. The custom iterator has been copied directly from the
+            MysqlServerInfo; but this might not be compatible with sqlite tables.
+
+        """
+        sqlalchemy_compatible(silent_fail=False) # stop before it gets too hairy
+
+        if "sqlite:///" in str(args): # obtain abspath of sqlitedb
+            args = self._abs_sqlite_path(args)
+            self._serverType = 'sqlite'
+        if "mysql://" in str(args):
+            self._serverType = 'mysql'
+        
+        DBServerInfo.__init__(self, 'sqlalchemy', *args, **kwargs) # IGB
+
+        self.args = args
+        self.kwargs = kwargs
+    
+    def _abs_sqlite_path(self, args):
+        """If the database engine is sqlite, obtain the absolute
+        path of the database file.
+        """
+        import os
+        new_args = []
+        for arg in args:
+            if "sqlite:///" in str(arg):
+                a = arg.split("sqlite:///")
+                new_args.append( "sqlite:///"+os.path.abspath(a[1]) ) # IS THIS A VALID FILE PATH?
+            else:
+                new_args.append(arg)
+        return tuple(new_args)
+
+    def _get_engine(self):
+        """Returns the engine for this database server."""
+        # SQLAlchemy objects imported here to avoid sqlalchemy import errors
+        # for users who want to use only DBServerInfo/SQLiteServerInfo
+        from sqlalchemy import create_engine, MetaData
+
+        try:
+            self.dbengine
+        except AttributeError:
+            # we're handling passing of dburi, which must be an arg, not a kwarg for sqlalchemy
+            new_kwargs = self.kwargs.copy()
+            new_args = list(self.args)
+
+            try:
+                dburi = new_kwargs.pop("dburi")
+                new_args.insert(0, dburi)
+                new_args = tuple(new_args)
+            except KeyError:
+                pass
+            
+            self.dbengine = create_engine(*new_args, **new_kwargs)
+
+        try:
+            self.metadata
+        except AttributeError:
+            self.metadata = MetaData()
+            self.metadata.bind = self.dbengine            
+            
+        return self.dbengine
+        
+
+    def _start_connection(self):
+        """Start a new connection."""
+        try:
+            self.dbengine
+        except AttributeError:
+            self._get_engine()
+        try:
+            self._connection
+        except AttributeError:
+            self._connection = self.dbengine.pool.create_connection().get_connection()
+        try:
+            self._cursor
+        except AttributeError:
+            self._cursor = self._connection.cursor()
+
+    ## ORIGINAL IGB CODE
+    # def new_cursor(self, *args, **kwargs):
+    #     #logger.info("GenericServerInfo: %s, %s" %(args, kwargs))
+    #     self._start_connection()
+    #     return self._connection.cursor()
+
+    def new_cursor(self, arraysize=None):
+        #logger.debug("Using new cursor in GenericServerInfo")
+        self._start_connection()
+        cursor = self._connection.cursor()
+        
+        try:
+            assert self.dbengine.driver == "mysqldb"
+        except AssertionError:
+            #logger.info("Streaming cursor only supported by MySQL")
+            return cursor
+        
+        if not self.serverSideCursors: # use regular MySQLdb cursor
+            #logger.info("Not using serverSideCursors")
+            return cursor
+        
+        try:
+            from MySQLdb import cursors
+            cursor.cursorclass = cursors.SSCursor
+            self._conn_sscursor = cursor.connection
+            #logger.info("Using SSCursor")
+        except Exception as e:
+            return cursor
+            
+        if arraysize is not None:
+            #logger.info("using arraysize %s" % arraysize)
+            cursor.arraysize = arraysize
+        
+        return cursor
+
+    def get_tableobj(self, tablename):
+        """Returns the SQLAlchemy table object."""        
+        try:
+            self.metadata
+        except AttributeError:
+            self._start_connection()
+        
+        try:
+            from sqlalchemy import Table
+        except Exception, e:
+            msg = "You need version 0.5.8 (or higher) of SQLAlchemy to take advantage of this feature."
+            raise(Exception(msg+": %s" % e.message))
+
+        #self.metadata.reflect()
+        try:    
+            #tableobj = self.metadata.tables[tablename]
+            tableobj = Table(tablename, self.metadata, useexisting=True)
+        except Exception, e:
+            raise(Exception("Error: The database does not contain requested table '%s'.\
+                            There are '%s' available tables. %s"%(tablename, 
+                                                                  len(self.metadata.tables),
+                                                                  e.message)))
+        
+        # clean-up
+        #logger.warn("SQLAlchemy: obtained table object %s" % tablename)
+        return tableobj
+
+    def get_create_table_schema(self,tablename):
+        """Returns the CREATE TABLE statement.
+        """
+        try:
+            self.dbengine
+        except AttributeError:
+            self._start_connection()
+        table_obj = self.get_tableobj(tablename)
+        engine = table_obj.metadata.bind.engine
+        dialect = table_obj.metadata.bind.dialect
+        s = dialect._show_create_table(engine,table_obj)
+        return str(s)
+
+    def get_table_schema(self, owner_obj, analyzeSchema=True, tablename=None):
+        """Obtain all of the following information required by SQLTableBase.
+            owner_obj - a SQLTableBase-derivative instance.
+            tablename - for non-sqlgraph support
+        """
+        self._start_connection()
+                
+        # setup format macros
+        try:
+            owner_obj._format_query
+        except AttributeError:
+            dbtype = self.get_engine_type() # mysql, sqlite
+            try:
+                macros = _formatMacrosDict[dbtype]
+            except KeyError:
+                raise(Exception("Error: Unsupported database back-end"))
+            owner_obj._format_query = SQLFormatDict(self.get_param_style(),
+                                                macros)
+
+        if not analyzeSchema: return
+        
+        # analyze schema information
+        owner_obj.columnName = []       
+        owner_obj.columnType = {}
+        owner_obj.description = {}
+        owner_obj.usesIntID = None
+        owner_obj.primary_key = None
+        owner_obj.primaryKey = None # IGB Note: for pygr compatibility
+        owner_obj.indexed = {} 
+        
+        if not tablename: # FOR non-sqlgraph support
+            tablename = owner_obj.name # VALID SQLTableBase derivative???
+        tableobj = self.get_tableobj(tablename)
+        
+        #table_columns = tableobj.columns
+        # Functional solution to support sqlalchemy 0.6.6
+        #owner_obj.columnName = [col.name for col in table_columns]
+        
+        # Import the reflection package to use the Inspector class
+        try:
+            from sqlalchemy.engine import reflection
+        except Exception, e:
+            msg = "You need version 0.6.6 of SQLAlchemy to take advantage of this feature."
+            raise(Exception(msg+": %s" % e.message))
+        
+        # Instantiate an inspector using the engine
+        inspector = reflection.Inspector.from_engine(self.dbengine)
+        table_info = inspector.get_columns(tablename)
+
+        # Obtain the column names
+        owner_obj.columnName = [str(n.get('name',None)) for n in table_info]
+        
+        # Set the column type
+        owner_obj.columnType = dict([[str(n.get('name',None)),str(n.get('type',None))] for n in table_info])
+        
+        #for col in table_columns:
+        #    owner_obj.columnType[col.name]=col.type.get_col_spec() # eg, 'VARCHAR(50)'
+        
+        # Set the description
+        owner_obj.description = owner_obj.columnType
+        #owner_obj.description = dict(owner_obj.columnType) # USES ONLY column
+                                                           # names as keys()
+
+        # # Move to obj owner init?
+        # need this! what type of obj is owner_obj?
+        ##logger.info("owner_obj = %s (type = %s)" % (repr(owner_obj), type(owner_obj)))
+        
+        # Obtain the primary key
+        owner_obj.usesIntID = bool(int == self.get_primary_key_type(tableobj, inspector=inspector, table_info=table_info))
+        owner_obj.primary_key = self.get_primary_key(tablename=tablename, inspector=inspector) #self.get_primary_key(tableobj, table_info=table_info)
+        owner_obj.primaryKey = owner_obj.primary_key # IGB Note: for pygr compatibility
+
+        # Obtain the indexes and create the dictionary
+        #owner_obj.indexed = {} #NOT SURE
+        #for idx in tableobj.indexes:
+        #    owner_obj.indexed[idx.name] = [c.name for c in idx.columns]
+
+        table_indexes = inspector.get_indexes(tablename)
+        owner_obj.indexed = dict([[str(n.get('name',None)),n.get('column_names',None)] for n in table_indexes])
+
+    def get_param_style(self):
+        """Retruns the parastyle for this database engine."""
+        self._start_connection()
+        return self.dbengine.dialect.paramstyle
+
+    def get_engine_type(self):
+        """Returns the type of the database engine, eg, mysql."""
+        self._start_connection()
+        return self.dbengine.dialect.name
+
+    def get_primary_key(self, tableobj=None, tablename=None, inspector=None):
+        """Returns the primary_key.
+        """
+        #table_info = {}
+        primary_keys = []
+
+        if tablename is not None and tableobj==None:
+            tableobj = self.get_tableobj(tablename)
+        else:
+            try:
+                from sqlalchemy.engine import reflection
+            except Exception, e:
+                msg = "You need version 0.6.6 of SQLAlchemy to take advantage of this feature."
+                raise(Exception(msg+": %s" % e.message))
+        
+        if not inspector:
+            inspector = reflection.Inspector.from_engine(self.dbengine)
+        #table_info = inspector.get_columns(tableobj.name)
+        
+        #type_dict = dict([[str(n.get('name',None)),str(n.get('type',None))] for n in table_info])
+        primary_keys = inspector.get_primary_keys(tableobj.name) # Get first primary key
+
+        try:
+            primary_key = primary_keys[0]
+            primary_key = str(primary_key)
+        except IndexError as e:
+            primary_key = None
+            msg = "IGB: The specified table has no primary key! (%s)" % tablename
+            #logger.warn(msg)
+             #raise(Exception(msg+": %s" % e.message)
+            
+        return primary_key
+    
+    def get_primary_key_type(self, tableobj=None, tablename=None, table_info=None, inspector=None):
+        """Returns the type of the primary key."""
+        primary_keys = [] # Schema could have multiple keys (candidate + others)
+
+        if tablename is not None and tableobj==None:
+            tableobj = self.get_tableobj(tablename)
+                
+        if not table_info:
+            try:
+                from sqlalchemy.engine import reflection
+            except Exception, e:
+                msg = "You need version 0.6.6 of SQLAlchemy to take advantage of this feature."
+                raise(Exception(msg+": %s" % e.message))
+
+        if not inspector:
+            inspector = reflection.Inspector.from_engine(self.dbengine)
+
+        if not table_info:
+            table_info = inspector.get_columns(tableobj.name)
+        
+        type_dict = dict([[str(n.get('name',None)),str(n.get('type',None))] for n in table_info])
+        primary_keys = inspector.get_primary_keys(tableobj.name)[0:1] # Get first primary key
+
+        #logger.warn("get_primary_key_type: %s" % (primary_keys)) 
+        if primary_keys:
+            try:
+                primary_key = primary_keys[0]
+                primary_key = str(primary_key)
+            except IndexError as e:
+                primary_key = None
+                msg = "IGB: The specified table has no primary key! (%s)" % tablename
+                #logger.warn(msg)
+
+            if "integer" in str(type_dict[primary_key]).lower():
+                return int
+            elif "char" in str(type_dict[primary_key]).lower():
+                return str
+            else:
+                return str # default
+        else:
+             #raise(Exception("Error: Unable to determine primary key type for table %s" % (tableobj.name) ))
+            pass
+        
+    def get_column_names(self,tableobj=None,tablename=None):
+        """Returns a list of column names.
+        """
+        if tablename is not None:
+            tableobj = self.get_tableobj(tablename)
+        return [str(col.name) for col in tableobj.columns]
+    
+    def get_columns(self,tableobj):
+        """Returns a list of SQLAlchemy column objects."""        
+        return [c for c in tableobj.columns]
+
+    # def iter_keys(self, db, cursor, map_f=iter,
+    #               cache_f=lambda x: [t[0] for t in x], **kwargs):
+    #     block_iterator = BlockIterator(db, cursor, **kwargs)
+    #     #logger.info("kwargs: %s" % kwargs)
+        
+    #     try:
+    #         cache_f = block_iterator.cache_f
+    #     except AttributeError:
+    #         pass
+        
+    #     #logger.info("cache_f = %s" % cache_f)
+
+    #     return db.generic_iterator(cursor=cursor, cache_f=cache_f,
+    #                                map_f=map_f, fetch_f=block_iterator)
+
+    # Copied from MysqlServerInfo
+    # IGB Code
+    def iter_keys(self, db, cursor, map_f=iter,
+                  cache_f=lambda x: [t[0] for t in x], **kwargs):
+        """This custom iterator method was copied from the MysqlServerInfo class.
+        """
+
+        #logger.info("kwargs: %s" % kwargs)
+        
+        block_iterator = BlockIterator(db, cursor, **kwargs)
+        try:
+            cache_f = block_iterator.cache_f
+        except AttributeError as e:
+            #logger.error("Couldn't do caching: %s" % e)
+            pass
+        #logger.info("cache_f = %s" % cache_f)
+        
+        return db.generic_iterator(cursor=cursor, cache_f=cache_f,
+                                   map_f=map_f, fetch_f=block_iterator)
+
+
 # list of DBServerInfo subclasses for different modules
 _DBServerModuleDict = dict(MySQLdb=MySQLServerInfo,
-                           sqlite3=SQLiteServerInfo)
+                           sqlite3=SQLiteServerInfo,
+                           sqlalchemy=GenericServerInfo)
 
 
 class MapView(object, UserDict.DictMixin):
