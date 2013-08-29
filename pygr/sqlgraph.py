@@ -2386,7 +2386,8 @@ class GenericServerInfo(DBServerInfo):
         try:
             self._connection
         except AttributeError:
-            self._connection = self.dbengine.pool.create_connection().get_connection()
+            #self._connection = self.dbengine.pool.create_connection().get_connection()
+            self._connection = self.dbengine.raw_connection() #pool.create_connection().get_connection()
         try:
             self._cursor
         except AttributeError:
