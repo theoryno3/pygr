@@ -177,6 +177,7 @@ class AnnotationDB(object, UserDict.DictMixin):
                 k = iter(self).next() # get the first ID if any
                 self.get_annot_obj(k, self.sliceDB[k]) # valid annotation?
             except KeyError: # a convenient warning to the user...
+                k = ' (checkFirstID) '
                 raise KeyError('''\
 cannot create annotation object %s; sequence database %s may not be correct'''
                                % (k, repr(seqDB), ))
