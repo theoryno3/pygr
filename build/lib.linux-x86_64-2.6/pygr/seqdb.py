@@ -373,7 +373,15 @@ class FileDBSequence(SequenceBase):
     def __init__(self, db, id):
         self.id = id
         SequenceBase.__init__(self)
-        if self.id not in self.db.seqLenDict:
+
+        # IGB fix: Need to obtain list separately in order to catch TypeError with underlying
+        # bsddb shelve. See IGB's motifmap-devel issue: http://nimbus.ics.uci.edu/gitlab/uci-igb/motifmap-devel/issues/20
+        ids = []
+        try:
+            ids = [id for id in self.db.seqLenDict]
+        except (TypeError, Exception) as _exception:
+            pass
+        if self.id not in ids: #self.db.seqLenDict:
             raise KeyError('sequence %s not in db %s' % (self.id, self.db))
 
     def __len__(self):
