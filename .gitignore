@@ -6,3 +6,5 @@ dist
 pygr.egg-info
 .DS_Store
 MANIFEST
+gmon.out
+.nfs*

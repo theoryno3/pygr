@@ -79,6 +79,27 @@ replace the "python setup.py install" command with
 "python setup.py build".  This will build pygr but not install it
 in site-packages.
 
+IGB Installation
+Ensure that you have sourced the ${MOTIFMAP_ENV}/profile before
+proceeding.
+
+To compile, issue the following command
+    LDFLAGS="-L${MOTIFMAP_ENV}/lib64" python setup.py build
+
+Pyrex warnings are normal and should compile to completion if you
+are using gcc 4.1.2. If your system does not have this version,
+you will need to update your PATH and LD_LIBRARY_PATH to point
+to the gcc/4.1.2 that's shipped with motifmap-devel
+    
+	export PATH=${MOTIFMAP_ENV}/deps/gcc/4.1.2/bin:$PATH
+    export LD_LIBRARY_PATH=${MOTIFMAP_ENV}/deps/gcc/4.1.2/lib:$LD_LIBRARY_PATH
+
+To install, issue the following command
+    LDFLAGS="-L${MOTIFMAP_ENV}/lib64" python setup.py install
+
+This should install the pygr module under
+    ${MOTIFMAP_ENV}/lib64/python2.6/site-packages
+
 Using Pygr
 ----------
 Check out the tutorials in the online docs!
