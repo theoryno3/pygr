@@ -382,11 +382,18 @@ class FileDBSequence(SequenceBase):
         except (TypeError, Exception) as _exception:
             pass
         if self.id not in ids: #self.db.seqLenDict:
-            raise KeyError('sequence %s not in db %s' % (self.id, self.db))
+            raise KeyError('FileDBSequence(SequenceBase)::__init__: sequence %s not in db %s' % (self.id, self.db))
 
     def __len__(self):
         """Unpack this sequence's length from the seqLenDict."""
-        return self.db.seqLenDict[self.id][0]
+        # IGB fix: Need to handle TypeError when the 'region' doesn't exist (eg, chromosome)
+        # This error is encountered when the MSA doesn't include all of the scaffolds/chromosomes
+        # of the related genome
+        try:
+            thelen = self.db.seqLenDict[self.id][0]
+        except TypeError:
+            raise KeyError('FileDBSequence(SequenceBase)::__len__: sequence %s not in db %s' % (self.id, self.db))
+        return thelen
 
     def strslice(self, start, end, useCache=True):
         """Access slice of a sequence efficiently, using seqLenDict info."""
