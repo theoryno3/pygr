@@ -235,18 +235,40 @@ cannot create annotation object %s; sequence database %s may not be correct'''
             raise IndexError('annotation %s has zero or negative length \
                              [%s:%s]!' % (k, start, stop))
         seq_id = self.getSliceAttr(sliceInfo, 'id')
-        seq = self.seqDB[seq_id]
-        return self.itemClass(k, self, seq, start, stop)
 
+        # IGB fix: KeyError raised during Possum search
+        # when a chromosome doesn't exist. This error is relevant to
+        # 
+        try:
+            seq = self.seqDB[seq_id]
+        except KeyError:
+            #raise IndexError('annotation does not have key: %s' % seq_id)
+            seq = None
+        
+        # IGB fix: Return None if we encountered a IndexError above
+        if seq != None:
+            return self.itemClass(k, self, seq, start, stop)
+        else:
+            return None
+        
     def sliceAnnotation(self, k, sliceInfo, limitCache=True):
         'create annotation and cache it'
-        a = self.get_annot_obj(k, sliceInfo)
+        # IGB Fix: Need to handle weird slice info
+        try:
+            a = self.get_annot_obj(k, sliceInfo)
+        except IndexError:
+            a = None
+            pass
+        
         try: # APPLY CACHE SIZE LIMIT IF ANY
             if limitCache and self.maxCache < len(self._weakValueDict):
                 self._weakValueDict.clear()
         except AttributeError:
             pass
-        self._weakValueDict[k] = a # CACHE THIS IN OUR DICT
+
+        # IGB fix: Return a None
+        if a != None:
+            self._weakValueDict[k] = a # CACHE THIS IN OUR DICT
         return a
 
     def new_annotation(self, k, sliceInfo):
