@@ -236,20 +236,32 @@ cannot create annotation object %s; sequence database %s may not be correct'''
                              [%s:%s]!' % (k, start, stop))
         seq_id = self.getSliceAttr(sliceInfo, 'id')
 
+        # IGB fix: In case seq_id is a float or int
+        # For some reason, even the chr12 values are either unicode or some other type
+        is_int = False
+        is_float = False
+        is_string = False
+        
+        try:
+            seq_id = int(seq_id)
+            is_int = True
+        except:
+            try:
+                seq_id = float(seq_id)
+                is_float = True
+            except:
+                seq_id = str(seq_id)
+            
         # IGB fix: KeyError raised during Possum search
         # when a chromosome doesn't exist. This error is relevant to
         # 
         try:
             seq = self.seqDB[seq_id]
         except KeyError:
-            #raise IndexError('annotation does not have key: %s' % seq_id)
-            seq = None
+            raise IndexError('get_annot_obj::annotation does not have seq_id: %s (keys=%s)' % (seq_id, self.seqDB.keys()))
         
-        # IGB fix: Return None if we encountered a IndexError above
-        if seq != None:
-            return self.itemClass(k, self, seq, start, stop)
-        else:
-            return None
+        return self.itemClass(k, self, seq, start, stop)
+        
         
     def sliceAnnotation(self, k, sliceInfo, limitCache=True):
         'create annotation and cache it'
