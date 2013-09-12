@@ -376,6 +376,7 @@ class FileDBSequence(SequenceBase):
 
         # IGB fix: Need to obtain list separately in order to catch TypeError with underlying
         # bsddb shelve. See IGB's motifmap-devel issue: http://nimbus.ics.uci.edu/gitlab/uci-igb/motifmap-devel/issues/20
+        # For motifmap, the MSA might not have the scaffolds/chromosome's from the main genome
         ids = []
         try:
             ids = [id for id in self.db.seqLenDict]
@@ -388,7 +389,7 @@ class FileDBSequence(SequenceBase):
         """Unpack this sequence's length from the seqLenDict."""
         # IGB fix: Need to handle TypeError when the 'region' doesn't exist (eg, chromosome)
         # This error is encountered when the MSA doesn't include all of the scaffolds/chromosomes
-        # of the related genome
+        # of the primary/query genome
         try:
             thelen = self.db.seqLenDict[self.id][0]
         except TypeError:
