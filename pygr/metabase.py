@@ -1011,7 +1011,7 @@ class MetabaseList(MetabaseBase):
     normally will have no need to create additional instances of this
     class themselves.'''
     # DEFAULT WORLDBASEPATH: HOME, CURRENT DIR, XMLRPC IN THAT ORDER
-    defaultPath = ['~', '.', 'http://biodb2.bioinformatics.ucla.edu:5000']
+    defaultPath = ['~', '.'] # IGB: Removed defunct URL, 'http://biodb2.bioinformatics.ucla.edu:5000']
 
     def __init__(self, worldbasePath=None, resourceCache=None, separator=',',
                  mdbArgs={}):
