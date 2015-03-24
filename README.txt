@@ -80,7 +80,7 @@ replace the "python setup.py install" command with
 in site-packages.
 
 IGB Installation -- CentOS 5 and 6, python 2.6
-==============================
+==============================================
 Ensure that you have sourced the ${MOTIFMAP_ENV}/profile before
 proceeding. This should point to the absolute path of the 
 motifmap-devel checkout
